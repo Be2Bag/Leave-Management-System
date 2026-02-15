@@ -1,0 +1,530 @@
+basePath: /
+definitions:
+  dto.APIResponse:
+    properties:
+      data:
+        description: ข้อมูลที่ส่งกลับ (ถ้ามี)
+      message:
+        description: ข้อความอธิบาย
+        type: string
+      success:
+        description: สถานะความสำเร็จ
+        type: boolean
+    type: object
+  dto.AuthResponse:
+    properties:
+      token:
+        description: JWT access token
+        type: string
+      user:
+        allOf:
+        - $ref: '#/definitions/dto.UserResponse'
+        description: ข้อมูลผู้ใช้
+    type: object
+  dto.ErrorResponse:
+    properties:
+      errors:
+        description: รายละเอียดข้อผิดพลาด (ถ้ามี)
+        items:
+          type: string
+        type: array
+      message:
+        description: ข้อความอธิบายข้อผิดพลาด
+        type: string
+      success:
+        description: สถานะ (false เสมอ)
+        type: boolean
+    type: object
+  dto.LeaveBalanceResponse:
+    properties:
+      id:
+        description: รหัสยอดวันลา
+        type: string
+      leave_type:
+        description: ประเภทการลา
+        type: string
+      remaining_days:
+        description: วันลาคงเหลือ
+        type: number
+      total_days:
+        description: วันลาทั้งหมด
+        type: number
+      used_days:
+        description: วันลาที่ใช้ไป
+        type: number
+      year:
+        description: ปี
+        type: integer
+    type: object
+  dto.LeaveRequestResponse:
+    properties:
+      created_at:
+        description: วันที่ยื่นใบลา
+        type: string
+      end_date:
+        description: วันสิ้นสุด
+        type: string
+      id:
+        description: รหัสใบลา
+        type: string
+      leave_type:
+        description: ประเภทการลา
+        type: string
+      reason:
+        description: เหตุผลการลา
+        type: string
+      review_note:
+        description: หมายเหตุจากผู้อนุมัติ
+        type: string
+      reviewed_at:
+        description: วันที่อนุมัติ/ปฏิเสธ
+        type: string
+      reviewer_id:
+        description: รหัสผู้อนุมัติ
+        type: string
+      start_date:
+        description: วันเริ่มต้น
+        type: string
+      status:
+        description: สถานะ (pending/approved/rejected)
+        type: string
+      total_days:
+        description: จำนวนวันลาทั้งหมด
+        type: number
+      updated_at:
+        description: วันที่แก้ไขล่าสุด
+        type: string
+      user_id:
+        description: รหัสพนักงาน
+        type: string
+    type: object
+  dto.LoginRequest:
+    properties:
+      email:
+        description: อีเมล
+        type: string
+      password:
+        description: รหัสผ่าน
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  dto.PaginatedAPIResponse:
+    properties:
+      data:
+        description: รายการข้อมูล
+      message:
+        description: ข้อความอธิบาย
+        type: string
+      pagination:
+        allOf:
+        - $ref: '#/definitions/dto.PaginationMeta'
+        description: ข้อมูล pagination
+      success:
+        description: สถานะความสำเร็จ
+        type: boolean
+    type: object
+  dto.PaginationMeta:
+    properties:
+      page:
+        description: หน้าปัจจุบัน
+        type: integer
+      page_size:
+        description: จำนวนรายการต่อหน้า
+        type: integer
+      total:
+        description: จำนวนรายการทั้งหมด
+        type: integer
+      total_pages:
+        description: จำนวนหน้าทั้งหมด
+        type: integer
+    type: object
+  dto.ReviewLeaveRequest:
+    properties:
+      note:
+        description: หมายเหตุจากผู้อนุมัติ (ไม่บังคับ)
+        maxLength: 500
+        type: string
+    type: object
+  dto.SubmitLeaveRequest:
+    properties:
+      end_date:
+        description: วันสิ้นสุด (YYYY-MM-DD)
+        type: string
+      leave_type:
+        description: ประเภทการลา
+        enum:
+        - sick_leave
+        - annual_leave
+        - personal_leave
+        type: string
+      reason:
+        description: เหตุผลการลา
+        maxLength: 500
+        minLength: 5
+        type: string
+      start_date:
+        description: วันเริ่มต้น (YYYY-MM-DD)
+        type: string
+    required:
+    - end_date
+    - leave_type
+    - reason
+    - start_date
+    type: object
+  dto.UserResponse:
+    properties:
+      created_at:
+        description: วันที่สร้างบัญชี
+        type: string
+      email:
+        description: อีเมล
+        type: string
+      first_name:
+        description: ชื่อจริง
+        type: string
+      full_name:
+        description: ชื่อเต็ม
+        type: string
+      last_name:
+        description: นามสกุล
+        type: string
+      role:
+        description: บทบาท
+        type: string
+      user_id:
+        description: รหัสผู้ใช้ (UUID)
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@company.com
+    name: API Support
+  description: ระบบจัดการการลาของพนักงาน — Backend API สำหรับยื่นใบลา อนุมัติ ปฏิเสธ
+    และดูยอดวันลาคงเหลือ
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  title: Leave Management System API
+  version: "1.0"
+paths:
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: ยืนยันตัวตนด้วยอีเมลและรหัสผ่าน จะได้รับ JWT token กลับมา
+      parameters:
+      - description: ข้อมูลสำหรับเข้าสู่ระบบ
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.AuthResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: เข้าสู่ระบบ
+      tags:
+      - Authentication
+  /api/v1/leaves:
+    post:
+      consumes:
+      - application/json
+      description: สร้างคำขอลาใหม่ ระบบจะตรวจสอบวันลาซ้ำซ้อนและยอดวันลาคงเหลือโดยอัตโนมัติ
+      parameters:
+      - description: ข้อมูลสำหรับยื่นใบลา
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.SubmitLeaveRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.LeaveRequestResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: ยื่นใบลาใหม่
+      tags:
+      - Leave
+  /api/v1/leaves/my-balance:
+    get:
+      description: ดึงข้อมูลยอดวันลาคงเหลือทุกประเภทของผู้ใช้ที่เข้าสู่ระบบ
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.LeaveBalanceResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: ดูยอดวันลาคงเหลือ
+      tags:
+      - Leave
+  /api/v1/leaves/my-requests:
+    get:
+      description: ดึงข้อมูลใบลาทั้งหมดของผู้ใช้ที่เข้าสู่ระบบ (รองรับ pagination)
+      parameters:
+      - default: 1
+        description: หน้าที่ต้องการ (เริ่มจาก 1)
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: จำนวนรายการต่อหน้า (สูงสุด 100)
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.PaginatedAPIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.LeaveRequestResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: ดูประวัติใบลา
+      tags:
+      - Leave
+  /api/v1/manager/pending-requests:
+    get:
+      description: ดึงข้อมูลใบลาทั้งหมดที่มีสถานะ pending สำหรับผู้จัดการ (รองรับ
+        pagination)
+      parameters:
+      - default: 1
+        description: หน้าที่ต้องการ (เริ่มจาก 1)
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: จำนวนรายการต่อหน้า (สูงสุด 100)
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.PaginatedAPIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.LeaveRequestResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: ดูใบลารอการอนุมัติ
+      tags:
+      - Manager
+  /api/v1/manager/requests/{id}/approve:
+    post:
+      consumes:
+      - application/json
+      description: ผู้จัดการอนุมัติคำขอลา ระบบจะหักยอดวันลาของพนักงานโดยอัตโนมัติ
+      parameters:
+      - description: รหัสใบลา (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: หมายเหตุจากผู้อนุมัติ
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ReviewLeaveRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: อนุมัติใบลา
+      tags:
+      - Manager
+  /api/v1/manager/requests/{id}/reject:
+    post:
+      consumes:
+      - application/json
+      description: ผู้จัดการปฏิเสธคำขอลา ยอดวันลาของพนักงานจะไม่เปลี่ยนแปลง
+      parameters:
+      - description: รหัสใบลา (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: หมายเหตุจากผู้อนุมัติ
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ReviewLeaveRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: ปฏิเสธใบลา
+      tags:
+      - Manager
+securityDefinitions:
+  BearerAuth:
+    description: กรุณาใส่ Bearer token เช่น "Bearer eyJhbGciOiJIUzI1NiIs..."
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

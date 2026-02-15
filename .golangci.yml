@@ -1,0 +1,486 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# .golangci.yml — Hexagonal Architecture Linting Rules
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# โครงสร้าง Hexagonal Architecture ของโปรเจคนี้:
+#
+#   cmd/server/          → Composition Root (wire dependencies, bootstrap app)
+#   internal/
+#     core/
+#       domain/          → Domain Models & Business Rules (innermost — NO dependencies)
+#       ports/           → Interfaces/Contracts (depends on Domain only)
+#       services/        → Use Cases / Business Logic (depends on Domain + Ports)
+#     adapters/
+#       dto/             → Data Transfer Objects for API I/O (pure structs)
+#       handlers/        → Primary/Driving Adapters (HTTP → Service)
+#       http/            → Router & Middleware (HTTP wiring)
+#       repositories/    → Secondary/Driven Adapters (Service → Database)
+#     config/            → Application Configuration
+#     infrastructure/
+#       database/        → Technical Infrastructure (DB connections)
+#   pkg/                 → Shared Utilities (self-contained, reusable)
+#
+# กฎ Dependency: ลูกศรชี้เข้าด้านใน (Dependency Rule)
+#   cmd → adapters, infrastructure, config, core, pkg
+#   adapters/handlers → ports, domain, dto, pkg (ห้าม services, repositories)
+#   adapters/repositories → ports, domain, infrastructure/database (ห้าม handlers, dto)
+#   adapters/http → ports, domain, handlers, dto, pkg (ห้าม services, repositories)
+#   adapters/dto → domain only (pure data structures)
+#   services → ports, domain (ห้าม adapters, infrastructure, config)
+#   ports → domain only
+#   domain → NOTHING (stdlib + uuid เท่านั้น)
+#   infrastructure → config (ห้าม core, adapters)
+#   config → stdlib only (ห้าม core, adapters, infrastructure)
+#   pkg → stdlib only (ห้าม internal)
+#
+# ══════════════════════════════════════════════════════════════════════════════
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    # ─── ตรวจสอบข้อผิดพลาดทั่วไป ───
+    - errcheck        # ตรวจสอบว่ามีการจัดการ error ทุกจุด
+    - govet           # ตรวจสอบข้อผิดพลาดที่ go vet พบ
+    - staticcheck     # ตรวจสอบข้อผิดพลาดแบบ static analysis
+
+    # ─── สไตล์โค้ด ───
+    - gofmt           # ตรวจสอบรูปแบบโค้ดตาม gofmt
+    - goimports       # ตรวจสอบการ import ให้เรียงลำดับถูกต้อง
+    - misspell        # ตรวจสอบการสะกดคำผิด
+    - revive          # ตรวจสอบ naming conventions, exported types ฯลฯ (แทน golint ที่ deprecated)
+
+    # ─── ความปลอดภัย ───
+    - gosec           # ตรวจสอบปัญหาความปลอดภัย (SQL injection, hardcoded credentials, etc.)
+
+    # ─── ประสิทธิภาพ ───
+    - gocritic        # ตรวจสอบรูปแบบโค้ดที่สามารถปรับปรุงได้
+    - prealloc        # ตรวจสอบว่าควร pre-allocate slice หรือไม่
+
+    # ─── ความซับซ้อน ───
+    - gocyclo         # ตรวจสอบ cyclomatic complexity ของฟังก์ชัน
+    - nestif          # ตรวจสอบ nested if ที่ซ้อนกันมากเกินไป
+    - funlen          # ตรวจสอบความยาวฟังก์ชัน — ป้องกัน God Functions
+
+    # ─── คุณภาพโค้ด ───
+    - unconvert       # ตรวจสอบ type conversion ที่ไม่จำเป็น
+    - unused          # ตรวจสอบตัวแปรและฟังก์ชันที่ไม่ได้ใช้
+    - exhaustive      # ตรวจสอบ switch statements ให้ครบทุก case (สำคัญสำหรับ enum: Role, LeaveStatus)
+    - nolintlint      # ตรวจสอบว่า nolint directives มีเหตุผลกำกับ
+    - dupl            # ตรวจสอบโค้ดที่ซ้ำกัน — ส่งเสริม DRY principle
+    - interfacebloat  # ตรวจสอบ interface ไม่ให้มี methods มากเกินไป (Interface Segregation Principle)
+
+    # ─── Hexagonal Architecture — Dependency Rules ───
+    - depguard        # บังคับทิศทาง dependency ตามหลัก Hexagonal Architecture
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LINTER SETTINGS
+# ══════════════════════════════════════════════════════════════════════════════
+linters-settings:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # DEPGUARD — Hexagonal Architecture Dependency Enforcement
+  # ════════════════════════════════════════════════════════════════════════════
+  # แต่ละ rule กำหนดว่า source files ใน layer นั้น
+  # อนุญาต (allow) และ ห้าม (deny) import package ใดบ้าง
+  #
+  # allow → ถ้ากำหนด allow = เฉพาะ packages เหล่านี้เท่านั้นที่ import ได้
+  #          (allowlist mode — ทุกอย่างที่ไม่อยู่ใน allow จะถูก deny โดยอัตโนมัติ)
+  # deny  → ให้ error message ที่ชัดเจนเมื่อ developer ทำผิดกฎ
+  # ════════════════════════════════════════════════════════════════════════════
+  depguard:
+    rules:
+
+      # ══════════════════════════════════════════════════════════════
+      # DOMAIN LAYER (Innermost) — ห้ามพึ่งพาชั้นอื่นเด็ดขาด
+      # ══════════════════════════════════════════════════════════════
+      # Domain เป็นหัวใจของระบบ ต้อง "บริสุทธิ์" (Pure)
+      # - มี business rules, entities, value objects, domain errors
+      # - ใช้ได้แค่ stdlib + uuid (สำหรับ entity identity)
+      # - ห้าม import framework, database driver, หรือ package ภายในอื่น
+      # ══════════════════════════════════════════════════════════════
+      domain:
+        files:
+          - "**/internal/core/domain/**/*.go"
+        allow:
+          - $gostd
+          - "github.com/google/uuid"
+        deny:
+          - pkg: "github/be2bag/leave-management-system/internal/core/ports"
+            desc: "Domain MUST NOT depend on Ports — Domain is the innermost layer, Ports depend on Domain"
+          - pkg: "github/be2bag/leave-management-system/internal/core/services"
+            desc: "Domain MUST NOT depend on Services — Services implement business logic using Domain"
+          - pkg: "github/be2bag/leave-management-system/internal/adapters"
+            desc: "Domain MUST NOT depend on Adapters — Adapters are outer layer"
+          - pkg: "github/be2bag/leave-management-system/internal/infrastructure"
+            desc: "Domain MUST NOT depend on Infrastructure"
+          - pkg: "github/be2bag/leave-management-system/internal/config"
+            desc: "Domain MUST NOT depend on Config"
+          - pkg: "github/be2bag/leave-management-system/pkg"
+            desc: "Domain MUST NOT depend on pkg — keep Domain pure and self-contained"
+          - pkg: "github.com/gofiber"
+            desc: "Domain MUST NOT depend on HTTP framework"
+          - pkg: "go.mongodb.org"
+            desc: "Domain MUST NOT depend on database driver"
+
+      # ══════════════════════════════════════════════════════════════
+      # PORTS LAYER — Interface definitions pointing inward only
+      # ══════════════════════════════════════════════════════════════
+      # Ports กำหนด contracts (interfaces) ที่เชื่อมโลกภายในกับภายนอก
+      # - Repository interfaces (secondary/driven ports)
+      # - Service interfaces (primary/driving ports)
+      # - ต้องพึ่งพาได้แค่ Domain (เพราะ interface methods ใช้ Domain types)
+      # ══════════════════════════════════════════════════════════════
+      ports:
+        files:
+          - "**/internal/core/ports/**/*.go"
+        allow:
+          - $gostd
+          - "github/be2bag/leave-management-system/internal/core/domain"
+        deny:
+          - pkg: "github/be2bag/leave-management-system/internal/core/services"
+            desc: "Ports MUST NOT depend on Services — Ports define contracts, Services implement them"
+          - pkg: "github/be2bag/leave-management-system/internal/adapters"
+            desc: "Ports MUST NOT depend on Adapters — dependency flows inward only"
+          - pkg: "github/be2bag/leave-management-system/internal/infrastructure"
+            desc: "Ports MUST NOT depend on Infrastructure"
+          - pkg: "github/be2bag/leave-management-system/internal/config"
+            desc: "Ports MUST NOT depend on Config"
+          - pkg: "github/be2bag/leave-management-system/pkg"
+            desc: "Ports MUST NOT depend on pkg — Ports should only reference Domain types"
+          - pkg: "github.com/gofiber"
+            desc: "Ports MUST NOT depend on HTTP framework — Ports are framework-agnostic"
+          - pkg: "go.mongodb.org"
+            desc: "Ports MUST NOT depend on database driver — Ports are database-agnostic"
+
+      # ══════════════════════════════════════════════════════════════
+      # SERVICES LAYER (Use Cases) — Business logic implementation
+      # ══════════════════════════════════════════════════════════════
+      # Services implement Ports interfaces using Domain models
+      # - ใช้ Ports interfaces ผ่าน dependency injection (constructor)
+      # - ห้ามรู้จัก framework, database, หรือ external infrastructure
+      # - ห้าม import config โดยตรง (inject ค่าผ่าน constructor แทน)
+      # ══════════════════════════════════════════════════════════════
+      services:
+        files:
+          - "**/internal/core/services/**/*.go"
+        allow:
+          - $gostd
+          - "github/be2bag/leave-management-system/internal/core/domain"
+          - "github/be2bag/leave-management-system/internal/core/ports"
+          - "golang.org/x/crypto"            # สำหรับ password hashing (bcrypt)
+          - "github.com/golang-jwt/jwt/v5"   # สำหรับ JWT token generation/validation
+        deny:
+          - pkg: "github/be2bag/leave-management-system/internal/adapters"
+            desc: "Services MUST NOT depend on Adapters — use Ports interfaces instead (Dependency Inversion Principle)"
+          - pkg: "github/be2bag/leave-management-system/internal/infrastructure"
+            desc: "Services MUST NOT depend on Infrastructure — inject dependencies via Ports interfaces"
+          - pkg: "github/be2bag/leave-management-system/internal/config"
+            desc: "Services MUST NOT depend on Config — inject configuration values through constructor parameters"
+          - pkg: "github.com/gofiber"
+            desc: "Services MUST NOT depend on HTTP framework — Services are transport-agnostic"
+          - pkg: "go.mongodb.org"
+            desc: "Services MUST NOT depend on database driver — Services are database-agnostic"
+          - pkg: "github.com/gin-gonic"
+            desc: "Services MUST NOT depend on any HTTP framework"
+          - pkg: "github.com/labstack/echo"
+            desc: "Services MUST NOT depend on any HTTP framework"
+
+      # ══════════════════════════════════════════════════════════════
+      # ADAPTERS — DTO (Data Transfer Objects)
+      # ══════════════════════════════════════════════════════════════
+      # DTOs เป็น pure data structures สำหรับ API request/response
+      # - ไม่มี business logic
+      # - อนุญาตให้ reference Domain types (เช่น enums) เพื่อความสะดวก
+      # - ห้ามพึ่งพา services, handlers, repositories, infrastructure
+      # ══════════════════════════════════════════════════════════════
+      adapters-dto:
+        files:
+          - "**/internal/adapters/dto/**/*.go"
+        allow:
+          - $gostd
+          - "github/be2bag/leave-management-system/internal/core/domain"
+        deny:
+          - pkg: "github/be2bag/leave-management-system/internal/core/ports"
+            desc: "DTOs MUST NOT depend on Ports — DTOs are pure data structures"
+          - pkg: "github/be2bag/leave-management-system/internal/core/services"
+            desc: "DTOs MUST NOT depend on Services"
+          - pkg: "github/be2bag/leave-management-system/internal/adapters/handlers"
+            desc: "DTOs MUST NOT depend on Handlers — Handlers consume DTOs, not the reverse"
+          - pkg: "github/be2bag/leave-management-system/internal/adapters/repositories"
+            desc: "DTOs MUST NOT depend on Repositories"
+          - pkg: "github/be2bag/leave-management-system/internal/adapters/http"
+            desc: "DTOs MUST NOT depend on HTTP layer"
+          - pkg: "github/be2bag/leave-management-system/internal/infrastructure"
+            desc: "DTOs MUST NOT depend on Infrastructure"
+          - pkg: "github/be2bag/leave-management-system/internal/config"
+            desc: "DTOs MUST NOT depend on Config"
+          - pkg: "github.com/gofiber"
+            desc: "DTOs MUST NOT depend on HTTP framework — DTOs should be framework-agnostic"
+          - pkg: "go.mongodb.org"
+            desc: "DTOs MUST NOT depend on database driver"
+
+      # ══════════════════════════════════════════════════════════════
+      # ADAPTERS — HANDLERS (Primary/Driving Adapters)
+      # ══════════════════════════════════════════════════════════════
+      # Handlers แปลง HTTP request → Service call → HTTP response
+      # - ใช้ Ports interfaces (ไม่ import services โดยตรง)
+      # - ใช้ DTOs สำหรับ request/response parsing
+      # - ใช้ pkg/validator สำหรับ input validation
+      # - ห้าม import repositories, infrastructure, config
+      # ══════════════════════════════════════════════════════════════
+      adapters-handlers:
+        files:
+          - "**/internal/adapters/handlers/**/*.go"
+        allow:
+          - $gostd
+          - "github/be2bag/leave-management-system/internal/core/domain"
+          - "github/be2bag/leave-management-system/internal/core/ports"
+          - "github/be2bag/leave-management-system/internal/adapters/dto"
+          - "github/be2bag/leave-management-system/pkg"
+          - "github.com/gofiber/fiber/v2"
+        deny:
+          - pkg: "github/be2bag/leave-management-system/internal/core/services"
+            desc: "Handlers MUST NOT import Services directly — use Ports interfaces (Dependency Inversion Principle)"
+          - pkg: "github/be2bag/leave-management-system/internal/adapters/repositories"
+            desc: "Handlers MUST NOT depend on Repositories — communicate through Ports interfaces"
+          - pkg: "github/be2bag/leave-management-system/internal/adapters/http"
+            desc: "Handlers MUST NOT depend on HTTP/Router layer — Router references Handlers, not the reverse"
+          - pkg: "github/be2bag/leave-management-system/internal/infrastructure"
+            desc: "Handlers MUST NOT depend on Infrastructure"
+          - pkg: "github/be2bag/leave-management-system/internal/config"
+            desc: "Handlers MUST NOT depend on Config — inject values through constructor"
+          - pkg: "go.mongodb.org"
+            desc: "Handlers MUST NOT depend on database driver"
+
+      # ══════════════════════════════════════════════════════════════
+      # ADAPTERS — HTTP (Router & Middleware)
+      # ══════════════════════════════════════════════════════════════
+      # HTTP layer ทำหน้าที่ wire routes กับ handlers และ apply middleware
+      # - Router รวม handlers เข้ากับ routes
+      # - Middleware ทำ cross-cutting concerns (auth, security, logging)
+      # - ห้าม import services, repositories, infrastructure
+      # ══════════════════════════════════════════════════════════════
+      adapters-http:
+        files:
+          - "**/internal/adapters/http/**/*.go"
+        allow:
+          - $gostd
+          - "github/be2bag/leave-management-system/internal/core/domain"
+          - "github/be2bag/leave-management-system/internal/core/ports"
+          - "github/be2bag/leave-management-system/internal/adapters/handlers"
+          - "github/be2bag/leave-management-system/internal/adapters/dto"
+          - "github/be2bag/leave-management-system/pkg"
+          - "github.com/gofiber/fiber/v2"
+          - "github.com/gofiber/swagger"
+        deny:
+          - pkg: "github/be2bag/leave-management-system/internal/core/services"
+            desc: "HTTP layer MUST NOT import Services directly — use Ports interfaces"
+          - pkg: "github/be2bag/leave-management-system/internal/adapters/repositories"
+            desc: "HTTP layer MUST NOT depend on Repositories"
+          - pkg: "github/be2bag/leave-management-system/internal/infrastructure"
+            desc: "HTTP layer MUST NOT depend on Infrastructure"
+          - pkg: "github/be2bag/leave-management-system/internal/config"
+            desc: "HTTP layer MUST NOT depend on Config"
+          - pkg: "go.mongodb.org"
+            desc: "HTTP layer MUST NOT depend on database driver"
+
+      # ══════════════════════════════════════════════════════════════
+      # ADAPTERS — REPOSITORIES (Secondary/Driven Adapters)
+      # ══════════════════════════════════════════════════════════════
+      # Repositories implement Ports repository interfaces
+      # - เป็นตัวเชื่อมระหว่าง Business Logic กับ Database
+      # - ใช้ Domain models สำหรับ input/output (ไม่ใช่ DTOs)
+      # - ใช้ infrastructure/database สำหรับ DB connection
+      # - ห้าม import handlers, dto, http, services, config
+      # ══════════════════════════════════════════════════════════════
+      adapters-repositories:
+        files:
+          - "**/internal/adapters/repositories/**/*.go"
+        allow:
+          - $gostd
+          - "github/be2bag/leave-management-system/internal/core/domain"
+          - "github/be2bag/leave-management-system/internal/core/ports"
+          - "github/be2bag/leave-management-system/internal/infrastructure/database"
+          - "go.mongodb.org/mongo-driver/v2"
+        deny:
+          - pkg: "github/be2bag/leave-management-system/internal/core/services"
+            desc: "Repositories MUST NOT depend on Services — Repositories implement Ports interfaces"
+          - pkg: "github/be2bag/leave-management-system/internal/adapters/handlers"
+            desc: "Repositories MUST NOT depend on Handlers"
+          - pkg: "github/be2bag/leave-management-system/internal/adapters/dto"
+            desc: "Repositories MUST NOT depend on DTOs — use Domain models for data mapping"
+          - pkg: "github/be2bag/leave-management-system/internal/adapters/http"
+            desc: "Repositories MUST NOT depend on HTTP layer"
+          - pkg: "github/be2bag/leave-management-system/internal/config"
+            desc: "Repositories MUST NOT depend on Config — inject configuration via constructor"
+          - pkg: "github.com/gofiber"
+            desc: "Repositories MUST NOT depend on HTTP framework"
+
+      # ══════════════════════════════════════════════════════════════
+      # INFRASTRUCTURE LAYER — Technical implementations
+      # ══════════════════════════════════════════════════════════════
+      # Infrastructure ให้บริการทางเทคนิค (DB connection, external APIs)
+      # - พึ่งพาได้แค่ config (สำหรับ connection strings)
+      # - ห้ามรู้จัก business logic (core), adapters, หรือ HTTP framework
+      # ══════════════════════════════════════════════════════════════
+      infrastructure:
+        files:
+          - "**/internal/infrastructure/**/*.go"
+        allow:
+          - $gostd
+          - "github/be2bag/leave-management-system/internal/config"
+          - "go.mongodb.org/mongo-driver/v2"
+        deny:
+          - pkg: "github/be2bag/leave-management-system/internal/core"
+            desc: "Infrastructure MUST NOT depend on Core (Domain/Ports/Services) — Infrastructure provides technical capabilities only"
+          - pkg: "github/be2bag/leave-management-system/internal/adapters"
+            desc: "Infrastructure MUST NOT depend on Adapters"
+          - pkg: "github/be2bag/leave-management-system/pkg"
+            desc: "Infrastructure MUST NOT depend on pkg"
+          - pkg: "github.com/gofiber"
+            desc: "Infrastructure MUST NOT depend on HTTP framework"
+
+      # ══════════════════════════════════════════════════════════════
+      # CONFIG LAYER — Application configuration
+      # ══════════════════════════════════════════════════════════════
+      # Config โหลดและจัดการ environment variables / configuration
+      # - ต้องเป็น self-contained — ไม่รู้จัก business logic
+      # - ใช้ได้แค่ stdlib + config loading libraries (godotenv, viper, etc.)
+      # ══════════════════════════════════════════════════════════════
+      config:
+        files:
+          - "**/internal/config/**/*.go"
+        allow:
+          - $gostd
+          - "github.com/joho/godotenv"
+        deny:
+          - pkg: "github/be2bag/leave-management-system/internal/core"
+            desc: "Config MUST NOT depend on Core layer — Config is a utility, not business logic"
+          - pkg: "github/be2bag/leave-management-system/internal/adapters"
+            desc: "Config MUST NOT depend on Adapters"
+          - pkg: "github/be2bag/leave-management-system/internal/infrastructure"
+            desc: "Config MUST NOT depend on Infrastructure — Infrastructure depends on Config, not the reverse"
+          - pkg: "github/be2bag/leave-management-system/pkg"
+            desc: "Config MUST NOT depend on pkg"
+
+      # ══════════════════════════════════════════════════════════════
+      # PKG LAYER — Shared utilities (public packages)
+      # ══════════════════════════════════════════════════════════════
+      # pkg ต้องเป็น self-contained และ reusable
+      # - ห้ามพึ่งพา internal packages เด็ดขาด
+      # - ถ้า pkg import internal = circular dependency risk + ไม่ reusable
+      # ══════════════════════════════════════════════════════════════
+      pkg:
+        files:
+          - "**/pkg/**/*.go"
+        allow:
+          - $gostd
+          - "github.com/go-playground/validator/v10"
+        deny:
+          - pkg: "github/be2bag/leave-management-system/internal"
+            desc: "pkg MUST NOT depend on internal packages — pkg must be self-contained and independently reusable"
+
+      # ══════════════════════════════════════════════════════════════
+      # CMD LAYER — Composition Root (Application entry point)
+      # ══════════════════════════════════════════════════════════════
+      # main.go เป็น Composition Root ตามหลัก Dependency Injection
+      # - สามารถ import ได้ทุกชั้น (เพราะต้อง wire dependencies)
+      # - หน้าที่: สร้าง instances, inject dependencies, bootstrap app
+      # - ห้ามมี business logic ใน cmd
+      # ══════════════════════════════════════════════════════════════
+      cmd:
+        files:
+          - "**/cmd/**/*.go"
+        allow:
+          - $gostd
+          - "github/be2bag/leave-management-system/internal"
+          - "github/be2bag/leave-management-system/pkg"
+          - "github/be2bag/leave-management-system/docs"
+          - "github.com/gofiber/fiber/v2"
+          - "github.com/gofiber/swagger"
+          - "github.com/joho/godotenv"
+          - "go.mongodb.org/mongo-driver/v2"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # OTHER LINTER SETTINGS
+  # ════════════════════════════════════════════════════════════════════════════
+
+  gocyclo:
+    min-complexity: 15           # ฟังก์ชันที่ complexity > 15 ถือว่าซับซ้อนเกินไป
+
+  nestif:
+    min-complexity: 5            # nested if ซ้อนกัน > 5 ชั้นถือว่ามากเกินไป
+
+  funlen:
+    lines: 80                    # ฟังก์ชันยาวเกิน 80 บรรทัด → ควรแยก
+    statements: 50               # ฟังก์ชันมี statements เกิน 50 → ควรแยก
+
+  gocritic:
+    enabled-tags:
+      - diagnostic               # ตรวจจับ bugs ที่อาจเกิดขึ้น
+      - style                    # ตรวจสอบ idiomatic Go style
+      - performance              # ตรวจจับ performance improvements
+
+  errcheck:
+    check-type-assertions: true  # ตรวจสอบ type assertions ที่ไม่มี ok check
+    check-blank: true            # ตรวจสอบ errors ที่ assign ให้ _ (blank identifier)
+
+  govet:
+    enable-all: true             # เปิดทุก analyzer ของ go vet
+
+  exhaustive:
+    default-signifies-exhaustive: true  # ถ้ามี default: case ถือว่า exhaustive
+                                        # สำคัญสำหรับ enum: Role, LeaveStatus
+
+  interfacebloat:
+    max: 10                      # interface ไม่ควรมีเกิน 10 methods (Interface Segregation Principle)
+
+  dupl:
+    threshold: 150               # โค้ดที่ซ้ำกันเกิน 150 tokens → ควร refactor
+
+  revive:
+    rules:
+      - name: exported           # exported types/functions ต้องมี comment
+        severity: warning
+      - name: unexported-return  # unexported type ไม่ควร return จาก exported function
+        severity: warning
+      - name: blank-imports      # blank imports ต้องมีเหตุผล
+        severity: warning
+      - name: context-as-argument # context.Context ต้องเป็น parameter แรก
+        severity: error
+      - name: error-return       # error ต้องเป็น return value สุดท้าย
+        severity: error
+      - name: error-naming       # error variables ต้องขึ้นต้นด้วย Err
+        severity: warning
+      - name: var-naming         # ตรวจสอบ variable naming convention
+        severity: warning
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ISSUE FILTERING
+# ══════════════════════════════════════════════════════════════════════════════
+issues:
+  exclude-rules:
+    # ไม่ตรวจสอบ error handling / security ในไฟล์ทดสอบ
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+        - dupl
+        - funlen
+        - depguard
+
+    # ไม่ตรวจสอบ error ในการ close/flush
+    - text: "Error return value of .((os\\.)?std(out|err)\\..*|.*Close|.*Flush|os\\.Remove(All)?|.*printf?|os\\.(Un)?Setenv)"
+      linters:
+        - errcheck
+
+    # main.go อนุญาตให้ยาวกว่าปกติ (composition root มี wiring code มาก)
+    - path: cmd/server/main\.go
+      linters:
+        - funlen
+
+  max-issues-per-linter: 50
+  max-same-issues: 3

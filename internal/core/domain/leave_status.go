@@ -16,7 +16,3 @@ func (s LeaveStatus) IsValid() bool {
 		return false
 	}
 }
-
-func (s LeaveStatus) String() string {
-	return string(s)
-}

@@ -64,10 +64,6 @@ func (r *LeaveRequest) Reject(reviewerID ID, note string) error {
 	return nil
 }
 
-func (r *LeaveRequest) IsPending() bool {
-	return r.Status == LeaveStatusPending
-}
-
 // CalculateLeaveDays คำนวณจำนวนวันลาจากวันเริ่มต้นถึงวันสิ้นสุด (นับรวมวันเริ่มต้น)
 func CalculateLeaveDays(startDate, endDate time.Time) float64 {
 	start := time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, time.UTC)

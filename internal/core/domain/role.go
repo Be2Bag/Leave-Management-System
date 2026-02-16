@@ -7,10 +7,6 @@ const (
 	RoleManager  Role = "manager"  // คือผู้จัดการ — สามารถอนุมัติหรือปฏิเสธใบลาได้
 )
 
-func AllRoles() []Role {
-	return []Role{RoleEmployee, RoleManager}
-}
-
 func (r Role) IsValid() bool {
 	switch r {
 	case RoleEmployee, RoleManager:
@@ -18,8 +14,4 @@ func (r Role) IsValid() bool {
 	default:
 		return false
 	}
-}
-
-func (r Role) String() string {
-	return string(r)
 }

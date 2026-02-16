@@ -59,6 +59,11 @@ linters:
     - gocritic        # ตรวจสอบรูปแบบโค้ดที่สามารถปรับปรุงได้
     - prealloc        # ตรวจสอบว่าควร pre-allocate slice หรือไม่
 
+    # ─── Dead Code Detection ───
+    - unused          # ตรวจสอบตัวแปร, ฟังก์ชัน, types ที่ไม่ได้ใช้งาน
+    - unparam         # ตรวจสอบ function parameters ที่ไม่ได้ถูกใช้งาน
+    - ineffassign     # ตรวจสอบ assignment ที่ไม่มีผล (assign แล้วไม่ได้อ่านค่า)
+
     # ─── ความซับซ้อน ───
     - gocyclo         # ตรวจสอบ cyclomatic complexity ของฟังก์ชัน
     - nestif          # ตรวจสอบ nested if ที่ซ้อนกันมากเกินไป
@@ -66,7 +71,6 @@ linters:
 
     # ─── คุณภาพโค้ด ───
     - unconvert       # ตรวจสอบ type conversion ที่ไม่จำเป็น
-    - unused          # ตรวจสอบตัวแปรและฟังก์ชันที่ไม่ได้ใช้
     - exhaustive      # ตรวจสอบ switch statements ให้ครบทุก case (สำคัญสำหรับ enum: Role, LeaveStatus)
     - nolintlint      # ตรวจสอบว่า nolint directives มีเหตุผลกำกับ
     - dupl            # ตรวจสอบโค้ดที่ซ้ำกัน — ส่งเสริม DRY principle

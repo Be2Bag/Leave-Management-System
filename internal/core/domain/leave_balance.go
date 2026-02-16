@@ -20,35 +20,6 @@ func (b *LeaveBalance) RemainingDays() float64 {
 	return b.TotalDays - b.UsedDays - b.PendingDays
 }
 
-// AvailableDays คำนวณจำนวนวันลาที่ยังสามารถขอได้ (รวมที่จอง pending ด้วย)
-func (b *LeaveBalance) AvailableDays() float64 {
-	return b.TotalDays - b.UsedDays - b.PendingDays
-}
-
-// HasSufficientBalance ตรวจสอบว่ามีวันลาเพียงพอสำหรับจำนวนวันที่ต้องการหรือไม่
-func (b *LeaveBalance) HasSufficientBalance(days float64) bool {
-	return b.AvailableDays() >= days
-}
-
-// Deduct หักวันลาจากยอดคงเหลือ — คืน error หากวันลาไม่เพียงพอ
-func (b *LeaveBalance) Deduct(days float64) error {
-	if !b.HasSufficientBalance(days) {
-		return ErrInsufficientBalance
-	}
-	b.UsedDays += days
-	b.UpdatedAt = time.Now()
-	return nil
-}
-
-// Restore คืนวันลากลับเข้ายอดคงเหลือ (ใช้เมื่อใบลาถูกยกเลิก)
-func (b *LeaveBalance) Restore(days float64) {
-	b.UsedDays -= days
-	if b.UsedDays < 0 {
-		b.UsedDays = 0
-	}
-	b.UpdatedAt = time.Now()
-}
-
 func NewLeaveBalance(userID ID, leaveType LeaveType, totalDays float64, year int) *LeaveBalance {
 	now := time.Now()
 	return &LeaveBalance{

@@ -26,5 +26,4 @@ var (
 	// ─── Auth Errors ────────────────────────────────────────────────
 
 	ErrUnauthorized = errors.New("ไม่มีสิทธิ์เข้าถึง")
-	ErrForbidden    = errors.New("ไม่มีสิทธิ์ดำเนินการ")
 )

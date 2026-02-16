@@ -29,10 +29,3 @@ func NewUser(firstName, lastName, email, passwordHash string, role Role) *User {
 		UpdatedAt:    now,
 	}
 }
-
-func (u *User) IsManager() bool {
-	return u.Role == RoleManager
-}
-func (u *User) IsEmployee() bool {
-	return u.Role == RoleEmployee
-}

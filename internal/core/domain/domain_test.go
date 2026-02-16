@@ -23,58 +23,6 @@ func TestLeaveBalance_RemainingDays(t *testing.T) {
 	assert.Equal(t, 20.0, balance.RemainingDays(), "ยอดคงเหลือต้องลดลงตามที่ใช้ไป")
 }
 
-func TestLeaveBalance_HasSufficientBalance(t *testing.T) {
-	balance := domain.NewLeaveBalance(domain.NewID(), domain.LeaveTypeAnnual, 15, 2026)
-	balance.UsedDays = 10
-
-	// คงเหลือ 5 วัน
-	assert.True(t, balance.HasSufficientBalance(5), "ควรมีวันลาเพียงพอ (5/5)")
-	assert.True(t, balance.HasSufficientBalance(3), "ควรมีวันลาเพียงพอ (3/5)")
-	assert.False(t, balance.HasSufficientBalance(6), "ไม่ควรมีวันลาเพียงพอ (6/5)")
-}
-
-func TestLeaveBalance_Deduct_Success(t *testing.T) {
-	balance := domain.NewLeaveBalance(domain.NewID(), domain.LeaveTypeSick, 30, 2026)
-
-	err := balance.Deduct(5)
-
-	assert.NoError(t, err, "หักวันลาสำเร็จ")
-	assert.Equal(t, 5.0, balance.UsedDays, "used_days ต้องเพิ่มขึ้น")
-	assert.Equal(t, 25.0, balance.RemainingDays(), "remaining ต้องลดลง")
-}
-
-func TestLeaveBalance_Deduct_InsufficientBalance(t *testing.T) {
-	// ทดสอบว่าหักวันลาเกินยอดคงเหลือจะ error
-	balance := domain.NewLeaveBalance(domain.NewID(), domain.LeaveTypeAnnual, 15, 2026)
-	balance.UsedDays = 14
-
-	err := balance.Deduct(2) // คงเหลือ 1 แต่ขอหัก 2
-
-	assert.ErrorIs(t, err, domain.ErrInsufficientBalance, "ต้อง error ErrInsufficientBalance")
-	assert.Equal(t, 14.0, balance.UsedDays, "used_days ต้องไม่เปลี่ยน")
-}
-
-func TestLeaveBalance_Restore(t *testing.T) {
-	// ทดสอบการคืนวันลา
-	balance := domain.NewLeaveBalance(domain.NewID(), domain.LeaveTypeSick, 30, 2026)
-	balance.UsedDays = 10
-
-	balance.Restore(5)
-
-	assert.Equal(t, 5.0, balance.UsedDays, "ต้องคืนวันลากลับ")
-	assert.Equal(t, 25.0, balance.RemainingDays(), "remaining ต้องเพิ่มขึ้น")
-}
-
-func TestLeaveBalance_Restore_NeverNegative(t *testing.T) {
-	// ทดสอบว่าคืนเกินจะไม่ทำให้ used_days ติดลบ
-	balance := domain.NewLeaveBalance(domain.NewID(), domain.LeaveTypeSick, 30, 2026)
-	balance.UsedDays = 3
-
-	balance.Restore(10) // คืน 10 แต่ used แค่ 3
-
-	assert.Equal(t, 0.0, balance.UsedDays, "used_days ต้องไม่ติดลบ")
-}
-
 func TestLeaveBalance_PendingDays_AffectsAvailability(t *testing.T) {
 	// ทดสอบว่า PendingDays ถูกนับรวมในการตรวจสอบยอดคงเหลือ
 	balance := domain.NewLeaveBalance(domain.NewID(), domain.LeaveTypeSick, 10, 2026)
@@ -83,9 +31,6 @@ func TestLeaveBalance_PendingDays_AffectsAvailability(t *testing.T) {
 
 	// คงเหลือจริง = 10 - 5 - 4 = 1
 	assert.Equal(t, 1.0, balance.RemainingDays(), "remaining ต้องหัก pending ด้วย")
-	assert.Equal(t, 1.0, balance.AvailableDays(), "available ต้องหัก pending ด้วย")
-	assert.True(t, balance.HasSufficientBalance(1), "ต้องพอสำหรับ 1 วัน")
-	assert.False(t, balance.HasSufficientBalance(2), "ต้องไม่พอสำหรับ 2 วัน (เพราะมี pending จองไว้)")
 }
 
 // ─── Leave Request Tests ────────────────────────────────────────────────
@@ -101,7 +46,6 @@ func TestLeaveRequest_NewLeaveRequest(t *testing.T) {
 
 	assert.Equal(t, domain.LeaveStatusPending, request.Status, "สถานะเริ่มต้นต้องเป็น pending")
 	assert.Equal(t, 3.0, request.TotalDays, "จำนวนวันต้องเป็น 3")
-	assert.True(t, request.IsPending(), "ใบลาใหม่ต้องอยู่ในสถานะ pending")
 }
 
 func TestLeaveRequest_Approve_Success(t *testing.T) {
@@ -211,14 +155,4 @@ func TestLeaveStatus_IsValid(t *testing.T) {
 	assert.True(t, domain.LeaveStatusApproved.IsValid())
 	assert.True(t, domain.LeaveStatusRejected.IsValid())
 	assert.False(t, domain.LeaveStatus("cancelled").IsValid())
-}
-
-func TestUser_Roles(t *testing.T) {
-	manager := domain.NewUser("test", "user", "test@test.com", "hash", domain.RoleManager)
-	employee := domain.NewUser("test", "user", "test2@test.com", "hash", domain.RoleEmployee)
-
-	assert.True(t, manager.IsManager(), "manager ต้อง IsManager")
-	assert.False(t, manager.IsEmployee(), "manager ต้องไม่ IsEmployee")
-	assert.True(t, employee.IsEmployee(), "employee ต้อง IsEmployee")
-	assert.False(t, employee.IsManager(), "employee ต้องไม่ IsManager")
 }

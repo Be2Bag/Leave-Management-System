@@ -19,7 +19,6 @@ var errorStatusMap = map[error]int{
 	domain.ErrUnauthorized:       fiber.StatusUnauthorized,
 
 	// 403 Forbidden — ไม่มีสิทธิ์ดำเนินการ
-	domain.ErrForbidden:    fiber.StatusForbidden,
 	domain.ErrSelfApproval: fiber.StatusForbidden,
 
 	// 404 Not Found — ไม่พบข้อมูล
